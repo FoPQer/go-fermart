@@ -2,8 +2,8 @@ package routes
 
 import (
 	"FoPQer/go-fermart/internal/handlers"
-	"FoPQer/go-fermart/internal/middlewares"
 
+	echojwt "github.com/labstack/echo-jwt/v5"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 )
@@ -14,6 +14,8 @@ type Routes struct {
 	AuthHandler    *handlers.AuthHandler
 }
 
+var secret_key = []byte("your-secret-key")
+
 func (r *Routes) SetupRoutes() *echo.Echo {
 	e := echo.New()
 	
@@ -21,14 +23,15 @@ func (r *Routes) SetupRoutes() *echo.Echo {
   	e.Use(middleware.Recover())
 
 	user := e.Group("/api/user")
-
 	user.POST("/register", r.AuthHandler.Register)
 	user.POST("/login", r.AuthHandler.Login)
-	user.POST("/orders", r.OrderHandler.LoadOrder, middlewares.WithAuth())
-	user.GET("/orders", r.OrderHandler.GetOrders, middlewares.WithAuth())
-	user.GET("/balance", r.BalanceHandler.GetBalance, middlewares.WithAuth())
-	user.POST("/balance/withdraw", r.BalanceHandler.Withdraw, middlewares.WithAuth())
-	user.GET("/withdrawals", r.BalanceHandler.GetWithdrawals, middlewares.WithAuth())
+
+	auth := user.Group("", echojwt.JWT(secret_key))
+	auth.POST("/orders", r.OrderHandler.LoadOrder)
+	auth.GET("/orders", r.OrderHandler.GetOrders)
+	auth.GET("/balance", r.BalanceHandler.GetBalance)
+	auth.POST("/balance/withdraw", r.BalanceHandler.Withdraw)
+	auth.GET("/withdrawals", r.BalanceHandler.GetWithdrawals)
 
 	order := e.Group("/api/orders")
 	order.GET("/:id", r.OrderHandler.GetOrders)
