@@ -34,21 +34,20 @@ func NewMemoryRepository() *MemoryRepository {
 	}
 }
 
-func (r *MemoryRepository) LoadOrder(_ context.Context, userID int, orderID string, sum float32) error {
+func (r *MemoryRepository) LoadOrder(_ context.Context, userID int, orderID string) (*models.Order, error) {
 	if order, exists := r.orders[orderID]; exists {
 		if order.UserID != userID {
-			return &ErrOrderAlreadyExistsForAnotherUser{OrderID: orderID, UserID: userID}
+			return nil, &ErrOrderAlreadyExistsForAnotherUser{OrderID: orderID, UserID: userID}
 		}
-		return &ErrOrderAlreadyExists{OrderID: orderID}
+		return nil, &ErrOrderAlreadyExists{OrderID: orderID}
 	}
 	r.orders[orderID] = &models.Order{
 		ID:          orderID,
 		UserID:      userID,
 		Status:      "REGISTERED",
 		UploadedAt:  time.Now().Format(time.RFC3339),
-		Withdrawn:   sum,
 	}
-	return nil
+	return r.orders[orderID], nil
 }
 
 func (r *MemoryRepository) GetOrdersByUserID(_ context.Context, userID int) ([]*models.Order, error) {

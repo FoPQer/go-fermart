@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"FoPQer/go-fermart/internal/auth"
+	"FoPQer/go-fermart/internal/config"
 	"FoPQer/go-fermart/internal/repository/user"
 	"FoPQer/go-fermart/internal/services"
 	"errors"
@@ -11,7 +12,6 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
-var secretKey = []byte("your-secret-key")
 type RegisterRequest struct {
 	Username string `json:"username" validate:"required"`
 	Password string `json:"password" validate:"required"`
@@ -25,10 +25,11 @@ type LoginRequest struct {
 type AuthHandler struct{
 	userService *services.UserService
 	claimsService *auth.ClaimsService
+	cnf *config.Config
 }
 
-func NewAuthHandler(userService *services.UserService, claimsService *auth.ClaimsService) *AuthHandler {
-	return &AuthHandler{userService: userService, claimsService: claimsService}
+func NewAuthHandler(userService *services.UserService, claimsService *auth.ClaimsService, cnf *config.Config) *AuthHandler {
+	return &AuthHandler{userService: userService, claimsService: claimsService, cnf: cnf}
 }
 
 func (h *AuthHandler) Register(c *echo.Context) error {
@@ -48,7 +49,7 @@ func (h *AuthHandler) Register(c *echo.Context) error {
 	}
 
 	claims := h.claimsService.CreateClaims(userID)
-	token, err := h.claimsService.BuildJWTString(claims, secretKey)
+	token, err := h.claimsService.BuildJWTString(claims, h.cnf.GetSecretKey())
 	if err != nil {
 		c.Response().WriteHeader(http.StatusInternalServerError)
 		return err
@@ -76,7 +77,7 @@ func (h *AuthHandler) Login(c *echo.Context) error {
 	}
 
 	claims := h.claimsService.CreateClaims(userID)
-	token, err := h.claimsService.BuildJWTString(claims, secretKey)
+	token, err := h.claimsService.BuildJWTString(claims, h.cnf.GetSecretKey())
 	if err != nil {
 		c.Response().WriteHeader(http.StatusInternalServerError)
 		return err

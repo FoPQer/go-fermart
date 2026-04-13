@@ -7,6 +7,14 @@ import (
 	"fmt"
 )
 
+type ErrWrongOrderIDFormat struct {
+	OrderID string
+}
+
+func (e *ErrWrongOrderIDFormat) Error() string {
+	return fmt.Sprintf("wrong order ID format: %s", e.OrderID)
+}
+
 type OrderService struct {
 	repo order.Repository
 }
@@ -15,16 +23,18 @@ func NewOrderService(repo order.Repository) *OrderService {
 	return &OrderService{repo: repo}
 }
 
-func (s *OrderService) LoadOrder(ctx context.Context, userID int, orderID string) error {
+func (s *OrderService) LoadOrder(ctx context.Context, userID int, orderID string) (*models.Order, error) {
 	if err := s.checkOrder(orderID); err != nil {
-		return fmt.Errorf("failed to check order: %w", err)
+		return nil, &ErrWrongOrderIDFormat{OrderID: orderID}
 	}
 
-	if err := s.repo.LoadOrder(ctx, userID, orderID); err != nil {
-		return fmt.Errorf("failed to load order: %w", err)
+	order, err := s.repo.LoadOrder(ctx, userID, orderID)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to load order: %w", err)
 	}
 
-	return nil
+	return order, nil
 }
 
 func (s *OrderService) GetOrders(ctx context.Context, userID int) ([]*models.Order, error) {
