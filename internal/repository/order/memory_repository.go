@@ -17,11 +17,11 @@ func (e *ErrOrderAlreadyExists) Error() string {
 
 type ErrOrderAlreadyExistsForAnotherUser struct {
 	OrderID string
-	UserID  int
+	UserID  string
 }
 
 func (e *ErrOrderAlreadyExistsForAnotherUser) Error() string {
-	return fmt.Sprintf("order with ID %s already exists for user %d", e.OrderID, e.UserID)
+	return fmt.Sprintf("order with ID %s already exists for user %s", e.OrderID, e.UserID)
 }
 
 type MemoryRepository struct {
@@ -34,7 +34,7 @@ func NewMemoryRepository() *MemoryRepository {
 	}
 }
 
-func (r *MemoryRepository) LoadOrder(_ context.Context, userID int, orderID string) (*models.Order, error) {
+func (r *MemoryRepository) LoadOrder(_ context.Context, userID string, orderID string) (*models.Order, error) {
 	if order, exists := r.orders[orderID]; exists {
 		if order.UserID != userID {
 			return nil, &ErrOrderAlreadyExistsForAnotherUser{OrderID: orderID, UserID: userID}
@@ -50,7 +50,7 @@ func (r *MemoryRepository) LoadOrder(_ context.Context, userID int, orderID stri
 	return r.orders[orderID], nil
 }
 
-func (r *MemoryRepository) GetOrdersByUserID(_ context.Context, userID int) ([]*models.Order, error) {
+func (r *MemoryRepository) GetOrdersByUserID(_ context.Context, userID string) ([]*models.Order, error) {
 	var orders []*models.Order
 	for _, order := range r.orders {
 		if order.UserID == userID {

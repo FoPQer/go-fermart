@@ -23,7 +23,7 @@ func NewOrderService(repo order.Repository) *OrderService {
 	return &OrderService{repo: repo}
 }
 
-func (s *OrderService) LoadOrder(ctx context.Context, userID int, orderID string) (*models.Order, error) {
+func (s *OrderService) LoadOrder(ctx context.Context, userID string, orderID string) (*models.Order, error) {
 	if err := s.checkOrder(orderID); err != nil {
 		return nil, &ErrWrongOrderIDFormat{OrderID: orderID}
 	}
@@ -37,7 +37,7 @@ func (s *OrderService) LoadOrder(ctx context.Context, userID int, orderID string
 	return order, nil
 }
 
-func (s *OrderService) GetOrders(ctx context.Context, userID int) ([]*models.Order, error) {
+func (s *OrderService) GetOrders(ctx context.Context, userID string) ([]*models.Order, error) {
 	orders, err := s.repo.GetOrdersByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get orders: %w", err)
@@ -45,7 +45,7 @@ func (s *OrderService) GetOrders(ctx context.Context, userID int) ([]*models.Ord
 	return orders, nil
 }
 
-func (s *OrderService) GetWithdrawals(ctx context.Context, userID int) ([]*models.Order, error) {
+func (s *OrderService) GetWithdrawals(ctx context.Context, userID string) ([]*models.Order, error) {
 	withdrawals, err := s.repo.GetOrdersByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get withdrawals: %w", err)

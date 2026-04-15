@@ -6,7 +6,7 @@ import (
 )
 
 type Repository interface {
-	LoadOrder(ctx context.Context, userID int, orderID string) (*models.Order, error)
-	GetOrdersByUserID(ctx context.Context, userID int) ([]*models.Order, error)
+	LoadOrder(ctx context.Context, userID string, orderID string) (*models.Order, error)
+	GetOrdersByUserID(ctx context.Context, userID string) ([]*models.Order, error)
 	GetOrderByOrderID(ctx context.Context, orderID string) (*models.Order, error)
 }
