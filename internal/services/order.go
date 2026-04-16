@@ -31,7 +31,7 @@ func (s *OrderService) LoadOrder(ctx context.Context, userID string, orderID str
 	order, err := s.repo.LoadOrder(ctx, userID, orderID)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to load order: %w", err)
+		return order, fmt.Errorf("failed to load order: %w", err)
 	}
 
 	return order, nil

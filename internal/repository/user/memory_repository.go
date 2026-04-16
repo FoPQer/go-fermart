@@ -20,6 +20,14 @@ func (e *ErrInvalidCredentials) Error() string {
 	return "invalid username or password"
 }
 
+type ErrUserNotFound struct {
+	UserID string
+}
+
+func (e *ErrUserNotFound) Error() string {
+	return fmt.Sprintf("user with ID %s not found", e.UserID)
+}
+
 type MemoryRepository struct {
 	users map[string]*models.User
 }
@@ -57,5 +65,5 @@ func (r *MemoryRepository) GetUserByID(_ context.Context, userID string) (*model
 			return user, nil
 		}
 	}
-	return nil, fmt.Errorf("user with ID %s not found", userID)
+	return nil, &ErrUserNotFound{UserID: userID}
 }

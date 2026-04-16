@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"FoPQer/go-fermart/internal/auth/util"
 	"FoPQer/go-fermart/internal/repository/order"
 	"FoPQer/go-fermart/internal/services"
 	"errors"
@@ -8,7 +9,6 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v5"
 )
 
@@ -45,27 +45,19 @@ func (h *OrderHandler) LoadOrder(c *echo.Context) error {
 	req := LoadOrderRequest{
 		OrderID: string(rawOrderID),
 	}
-	token, err := echo.ContextGet[*jwt.Token](c, "user")
+	userID, err := util.GetUserIDFromToken(c)
 	if err != nil {
-		log.Printf("failed to get user from context: %v", err)
-		return c.String(http.StatusUnauthorized, "Failed to get user from context")
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		log.Printf("failed to parse claims from token: %v", err)
-		return c.String(http.StatusUnauthorized, "Failed to parse claims from token")
-	}
-	userID, ok := claims["UserID"].(string)
-	if !ok {
-		log.Printf("failed to parse userID from claims: %v", claims["UserID"])
-		return c.String(http.StatusUnauthorized, "Failed to parse userID from claims")
+		return c.String(http.StatusUnauthorized, "Failed to get user from token")
 	}
 	loadedOrder, err := h.orderService.LoadOrder(c.Request().Context(), userID, req.OrderID)
-	if errors.Is(err, &order.ErrOrderAlreadyExists{}) {
+	errAlreadyExists := &order.ErrOrderAlreadyExists{}
+	errAlreadyExistsForAnotherUser := &order.ErrOrderAlreadyExistsForAnotherUser{}
+	errWrongOrderIDFormat := &services.ErrWrongOrderIDFormat{}
+	if errors.As(err, &errAlreadyExists) {
 		return c.JSON(http.StatusOK, loadedOrder)
-	} else if errors.Is(err, &order.ErrOrderAlreadyExistsForAnotherUser{}) {
+	} else if errors.As(err, &errAlreadyExistsForAnotherUser) {
 		return c.String(http.StatusConflict, "Order already exists for another user")
-	} else if errors.Is(err, &services.ErrWrongOrderIDFormat{}) {
+	} else if errors.As(err, &errWrongOrderIDFormat) {
 		log.Printf("wrong order ID format: %s", req.OrderID)
 		return c.String(http.StatusUnprocessableEntity, "Wrong order ID format")
 	} else if err != nil {
@@ -76,27 +68,16 @@ func (h *OrderHandler) LoadOrder(c *echo.Context) error {
 }
 
 func (h *OrderHandler) GetOrders(c *echo.Context) error {
-	token, err := echo.ContextGet[*jwt.Token](c, "user")
+	userID, err := util.GetUserIDFromToken(c)
 	if err != nil {
-		log.Printf("failed to get user from context: %v", err)
-		return c.String(http.StatusUnauthorized, "Failed to get user from context")
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		log.Printf("failed to parse claims from token: %v", err)
-		return c.String(http.StatusUnauthorized, "Failed to parse claims from token")
-	}
-	userID, ok := claims["UserID"].(string)
-	if !ok {
-		log.Printf("failed to parse userID from claims: %v", claims["UserID"])
-		return c.String(http.StatusUnauthorized, "Failed to parse userID from claims")
+		return c.String(http.StatusUnauthorized, "Failed to get user from token")
 	}
 	orders, err := h.orderService.GetOrders(c.Request().Context(), userID)
 	if err != nil {
 		log.Printf("failed to get orders for userID %s: %v", userID, err)
 		return c.String(http.StatusInternalServerError, "Failed to get orders")
 	}
-	responses := make([]OrderResponse, len(orders))
+	responses := make([]OrderResponse, 0)
 	for _, order := range orders {
 		responses = append(responses, OrderResponse{
 			OrderID:    order.ID,

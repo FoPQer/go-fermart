@@ -39,8 +39,9 @@ func (r *MemoryRepository) LoadOrder(_ context.Context, userID string, orderID s
 		if order.UserID != userID {
 			return nil, &ErrOrderAlreadyExistsForAnotherUser{OrderID: orderID, UserID: userID}
 		}
-		return nil, &ErrOrderAlreadyExists{OrderID: orderID}
+		return order, &ErrOrderAlreadyExists{OrderID: orderID}
 	}
+	
 	r.orders[orderID] = &models.Order{
 		ID:          orderID,
 		UserID:      userID,
@@ -51,7 +52,7 @@ func (r *MemoryRepository) LoadOrder(_ context.Context, userID string, orderID s
 }
 
 func (r *MemoryRepository) GetOrdersByUserID(_ context.Context, userID string) ([]*models.Order, error) {
-	var orders []*models.Order
+	orders := make([]*models.Order, 0)
 	for _, order := range r.orders {
 		if order.UserID == userID {
 			orders = append(orders, order)
