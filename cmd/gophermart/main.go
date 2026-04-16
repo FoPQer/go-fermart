@@ -22,7 +22,7 @@ func main() {
 	claimsService := auth.NewClaimsService()
 
 	orderHandler := handlers.NewOrderHandler(orderService)
-	balanceHandler := handlers.NewBalanceHandler(userService)
+	balanceHandler := handlers.NewBalanceHandler(userService, orderService)
 	authHandler := handlers.NewAuthHandler(userService, claimsService, config)
 
 	r := routes.NewRoutes(orderHandler, balanceHandler, authHandler, config)

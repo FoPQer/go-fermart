@@ -47,6 +47,7 @@ func (r *MemoryRepository) Register(_ context.Context, username, password string
 		ID: 	  userID,
 		Username: username,
 		Password: password,
+		Balance: 1000,
 	}
 	return userID, nil
 }
