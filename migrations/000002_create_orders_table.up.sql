@@ -1,0 +1,9 @@
+CREATE TABLE orders (
+    number VARCHAR(255) PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status VARCHAR(50) NOT NULL DEFAULT 'NEW',
+    accrual NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    withdrawn NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    processed_at TIMESTAMPTZ
+);

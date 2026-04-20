@@ -42,8 +42,5 @@ func (r *Routes) SetupRoutes() *echo.Echo {
 	auth.POST("/balance/withdraw", r.BalanceHandler.Withdraw)
 	auth.GET("/withdrawals", r.BalanceHandler.GetWithdrawals)
 
-	order := e.Group("/api/orders")
-	order.GET("/:id", r.OrderHandler.GetOrders)
-
 	return e
 }

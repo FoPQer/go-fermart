@@ -3,19 +3,33 @@ package main
 import (
 	"FoPQer/go-fermart/internal/auth"
 	"FoPQer/go-fermart/internal/config"
+	"FoPQer/go-fermart/internal/config/db"
 	"FoPQer/go-fermart/internal/handlers"
-	"FoPQer/go-fermart/internal/repository/order"
-	"FoPQer/go-fermart/internal/repository/user"
+	"FoPQer/go-fermart/internal/repository"
 	"FoPQer/go-fermart/internal/routes"
 	"FoPQer/go-fermart/internal/services"
+	"errors"
 	"log/slog"
 )
 
 func main() {
 	config := config.NewConfig()
 	config.Load()
-	userRepository := user.NewMemoryRepository()
-	orderRepository := order.NewMemoryRepository()
+	pgxConf, err := db.InitPgsql(config)
+	if errors.Is(err, db.ErrConnNotFound) {
+		slog.Info("Database connection string not found, using file or memory repository")
+	} else if err != nil {
+		slog.Error("Error initializing database: ", "error", err)
+		panic(err)
+	}
+	if pgxConf.GetDBConn() != nil {
+		defer pgxConf.GetDBConn().Close()
+	} 
+
+	repoFactory := repository.NewFactory(pgxConf.GetDBConn())
+
+	userRepository := repoFactory.GetUserRepository()
+	orderRepository := repoFactory.GetOrderRepository()
 
 	orderService := services.NewOrderService(orderRepository)
 	userService := services.NewUserService(userRepository)
@@ -29,7 +43,7 @@ func main() {
 	e := r.SetupRoutes()
 
 	// Start server
-	if err := e.Start(":8080"); err != nil {
+	if err := e.Start(":8081"); err != nil {
 		slog.Error("failed to start server", "error", err)
 	}
 }

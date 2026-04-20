@@ -53,14 +53,6 @@ func (s *OrderService) GetWithdrawals(ctx context.Context, userID string) ([]*mo
 	return withdrawals, nil
 }
 
-func (s *OrderService) GetOrderByID(ctx context.Context, orderID string) (*models.Order, error) {
-	order, err := s.repo.GetOrderByOrderID(ctx, orderID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get order: %w", err)
-	}
-	return order, nil
-}
-
 func (s *OrderService) checkOrder(orderID string) error {
 	if orderID == "" {
 		return fmt.Errorf("order ID is empty")

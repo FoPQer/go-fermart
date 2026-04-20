@@ -45,8 +45,8 @@ func (r *MemoryRepository) LoadOrder(_ context.Context, userID string, orderID s
 	r.orders[orderID] = &models.Order{
 		ID:          orderID,
 		UserID:      userID,
-		Status:      "REGISTERED",
-		UploadedAt:  time.Now().Format(time.RFC3339),
+		Status:      models.OrderStatusNew,
+		UploadedAt:  time.Now(),
 	}
 	return r.orders[orderID], nil
 }
@@ -59,12 +59,4 @@ func (r *MemoryRepository) GetOrdersByUserID(_ context.Context, userID string) (
 		}
 	}
 	return orders, nil
-}
-
-func (r *MemoryRepository) GetOrderByOrderID(_ context.Context, orderID string) (*models.Order, error) {
-	order, exists := r.orders[orderID]
-	if !exists {
-		return nil, fmt.Errorf("order with ID %s not found", orderID)
-	}
-	return order, nil
 }

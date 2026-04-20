@@ -13,12 +13,12 @@ import (
 )
 
 type RegisterRequest struct {
-	Username string `json:"username" validate:"required"`
+	Username string `json:"login" validate:"required"`
 	Password string `json:"password" validate:"required"`
 }
 
 type LoginRequest struct {
-	Username string `json:"username" validate:"required"`
+	Username string `json:"login" validate:"required"`
 	Password string `json:"password" validate:"required"`
 }
 
@@ -39,7 +39,7 @@ func (h *AuthHandler) Register(c *echo.Context) error {
 		return err
 	}
 	userID, err := h.userService.Register(c.Request().Context(), req.Username, req.Password)
-	if errors.Is(err, &user.ErrUserAlreadyExists{}) {
+	if errors.Is(err, &user.ErrUserAlreadyExists{Username: req.Username}) {
 		c.Response().WriteHeader(http.StatusConflict)
 		return err
 	}

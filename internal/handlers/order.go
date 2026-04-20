@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v5"
 )
@@ -50,9 +51,9 @@ func (h *OrderHandler) LoadOrder(c *echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Failed to get user from token")
 	}
 	loadedOrder, err := h.orderService.LoadOrder(c.Request().Context(), userID, req.OrderID)
-	errAlreadyExists := &order.ErrOrderAlreadyExists{}
-	errAlreadyExistsForAnotherUser := &order.ErrOrderAlreadyExistsForAnotherUser{}
-	errWrongOrderIDFormat := &services.ErrWrongOrderIDFormat{}
+	errAlreadyExists := &order.ErrOrderAlreadyExists{OrderID: req.OrderID}
+	errAlreadyExistsForAnotherUser := &order.ErrOrderAlreadyExistsForAnotherUser{OrderID: req.OrderID, UserID: userID}
+	errWrongOrderIDFormat := &services.ErrWrongOrderIDFormat{OrderID: req.OrderID}
 	if errors.As(err, &errAlreadyExists) {
 		return c.JSON(http.StatusOK, loadedOrder)
 	} else if errors.As(err, &errAlreadyExistsForAnotherUser) {
@@ -81,15 +82,11 @@ func (h *OrderHandler) GetOrders(c *echo.Context) error {
 	for _, order := range orders {
 		responses = append(responses, OrderResponse{
 			OrderID:    order.ID,
-			Status:     order.Status,
+			Status:     string(order.Status),
 			Accrual:    order.Accrual,
-			UploadedAt: order.UploadedAt,
+			UploadedAt: order.UploadedAt.Format(time.RFC3339),
 		})
 
 	}
 	return c.JSON(http.StatusOK, GetOrdersResponse{Orders: responses})
-}
-
-func (h *OrderHandler) GetOrderInfo(c *echo.Context) error {
-	return c.String(http.StatusOK, "Get Order by ID endpoint")
 }
