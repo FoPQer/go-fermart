@@ -71,3 +71,33 @@ func (r *PgsqlRepository) GetOrdersByUserID(ctx context.Context, userID string) 
 	}
 	return orders, nil
 }
+
+func (r *PgsqlRepository) GetOrdersWithdrawnByUserID(ctx context.Context, userID string) ([]*models.Order, error) {
+	rows, err := r.conn.Query(ctx, "SELECT number, user_id, withdrawn, processed_at FROM orders WHERE user_id = $1 AND withdrawn > 0 ORDER BY processed_at DESC", userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get withdrawn orders by user ID: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []*models.Order
+	for rows.Next() {
+		var order models.Order
+		if err := rows.Scan(&order.ID, &order.UserID, &order.Withdrawn, &order.ProcessedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan order: %w", err)
+		}
+		orders = append(orders, &order)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+	return orders, nil
+}
+
+func (r *PgsqlRepository) UpdateOrder(ctx context.Context, order *models.Order) error {
+	_, err := r.conn.Exec(ctx, "UPDATE orders SET status = $1, accrual = $2, withdrawn = $3, processed_at = $4 WHERE number = $5",
+		order.Status, order.Accrual, order.Withdrawn, order.ProcessedAt, order.ID)
+	if err != nil {
+		return fmt.Errorf("failed to update order: %w", err)
+	}
+	return nil
+}

@@ -31,8 +31,8 @@ func main() {
 	userRepository := repoFactory.GetUserRepository()
 	orderRepository := repoFactory.GetOrderRepository()
 
-	orderService := services.NewOrderService(orderRepository)
 	userService := services.NewUserService(userRepository)
+	orderService := services.NewOrderService(orderRepository, userService)
 	claimsService := auth.NewClaimsService()
 
 	orderHandler := handlers.NewOrderHandler(orderService)

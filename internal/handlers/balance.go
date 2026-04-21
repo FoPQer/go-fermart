@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"FoPQer/go-fermart/internal/auth/util"
+	"FoPQer/go-fermart/internal/models"
 	"FoPQer/go-fermart/internal/repository/user"
 	"FoPQer/go-fermart/internal/services"
 	"errors"
@@ -25,11 +26,7 @@ type WithdrawRequest struct {
 type WithdrawResponse struct {
 	Order 	    string     `json:"order"`
 	Sum   	    float32    `json:"sum"`
-	ProcessedAt time.Time  `json:"processed_at"`
-}
-
-type GetWithdrawalsResponse struct {
-	Withdrawals []WithdrawResponse `json:"withdrawals"`
+	ProcessedAt *time.Time  `json:"processed_at"`
 }
 
 
@@ -83,19 +80,44 @@ func (h *BalanceHandler) Withdraw(c *echo.Context) error {
 		return c.String(http.StatusInternalServerError, "Failed to load order")
 	}
 	err = h.userService.DoWithdraw(c.Request().Context(), userID, req.Sum)
-	errNotEnoughFunds := &services.ErrNotEnoughFunds{}
+	errNotEnoughFunds := &models.ErrNotEnoughFunds{}
 	if errors.As(err, &errNotEnoughFunds) {
 		return c.String(http.StatusPaymentRequired, "Insufficient balance")
 	} else if err != nil {
 		log.Printf("failed to process withdrawal for userID %s: %v", userID, err)
 		return c.String(http.StatusInternalServerError, "Failed to process withdrawal")
 	}
-	order.Accrual = req.Sum
-	order.Status = "PROCESSED"
+	order.Withdrawn = req.Sum
 
-	return c.String(http.StatusOK, "Order processed successfully")
+	if err := h.orderService.UpdateOrder(c.Request().Context(), order); err != nil {
+		log.Printf("failed to update order %s with withdrawal info: %v", order.ID, err)
+		return c.String(http.StatusInternalServerError, "Failed to update order with withdrawal info")
+	}
+
+	return c.JSON(http.StatusOK, order)
 }
 
 func (h *BalanceHandler) GetWithdrawals(c *echo.Context) error {
-	return c.String(http.StatusOK, "Get Withdrawals endpoint")
+	userID, err := util.GetUserIDFromToken(c)
+	if err != nil {
+		return c.String(http.StatusUnauthorized, "Failed to get user from token")
+	}
+	withdrawals, err := h.orderService.GetWithdrawals(c.Request().Context(), userID)
+	if err != nil {
+		log.Printf("failed to get withdrawals for userID %s: %v", userID, err)
+		return c.String(http.StatusInternalServerError, "Failed to get withdrawals")
+	}
+
+	responses := make([]WithdrawResponse, 0)
+	for _, w := range withdrawals {
+		responses = append(responses, WithdrawResponse{
+			Order:       w.ID,
+			Sum:         w.Withdrawn,
+			ProcessedAt: w.ProcessedAt,
+		})
+	}
+	if len(responses) > 0 {
+		return c.JSON(http.StatusOK, responses)
+	}
+	return c.NoContent(http.StatusNoContent)
 }

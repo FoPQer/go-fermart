@@ -7,15 +7,6 @@ import (
 	"fmt"
 )
 
-type ErrNotEnoughFunds struct {
-	UserID string
-	Sum    float32
-}
-
-func (e *ErrNotEnoughFunds) Error() string {
-	return fmt.Sprintf("user %s has insufficient funds: %.2f", e.UserID, e.Sum)
-}
-
 type UserService struct {
 	repo user.Repository
 }
@@ -48,6 +39,21 @@ func (s *UserService) GetUserInfo(ctx context.Context, userID string) (*models.U
 	return user, nil
 }
 
+func (s *UserService) DoDeposit(ctx context.Context, userID string, sum float32) error {
+	user, err := s.repo.GetUserByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get user info: %w", err)
+	}
+
+	user.AddBalance(sum)
+
+	if err := s.repo.UpdateUser(ctx, user); err != nil {
+		return fmt.Errorf("failed to update user balance: %w", err)
+	}
+
+	return nil
+}
+
 func (s *UserService) DoWithdraw(ctx context.Context, userID string, sum float32) error {
 	user, err := s.repo.GetUserByID(ctx, userID)
 	if err != nil {
@@ -55,11 +61,16 @@ func (s *UserService) DoWithdraw(ctx context.Context, userID string, sum float32
 	}
 
 	if user.Balance < sum {
-		return &ErrNotEnoughFunds{UserID: userID, Sum: sum}
+		return &models.ErrNotEnoughFunds{UserID: userID, Sum: sum}
 	}
 
-	user.Balance -= sum
-	user.SumWithdrawn += sum
+	if err := user.Withdraw(sum); err != nil {
+		return fmt.Errorf("failed to withdraw funds: %w", err)
+	}
+
+	if err := s.repo.UpdateUser(ctx, user); err != nil {
+		return fmt.Errorf("failed to update user balance: %w", err)
+	}
 
 	return nil
 }

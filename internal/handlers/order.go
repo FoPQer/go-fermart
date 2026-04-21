@@ -17,10 +17,6 @@ type LoadOrderRequest struct {
 	OrderID string `validate:"required"`
 }
 
-type GetOrdersResponse struct {
-	Orders []OrderResponse `json:"orders"`
-}
-
 type OrderResponse struct {
 	OrderID    string     `json:"number"`
 	Status     string     `json:"status"`
@@ -88,5 +84,5 @@ func (h *OrderHandler) GetOrders(c *echo.Context) error {
 		})
 
 	}
-	return c.JSON(http.StatusOK, GetOrdersResponse{Orders: responses})
+	return c.JSON(http.StatusOK, responses)
 }

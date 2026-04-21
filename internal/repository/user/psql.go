@@ -54,3 +54,14 @@ func (r *PsqlRepository) GetUserByID(ctx context.Context, userID string) (*model
 	}
 	return &user, nil
 }
+
+func (r *PsqlRepository) UpdateUser(ctx context.Context, user *models.User) error {
+	commandTag, err := r.conn.Exec(ctx, "UPDATE users SET balance = $1, sumWithdrawn = $2 WHERE id = $3", user.Balance, user.SumWithdrawn, user.ID)
+	if err != nil {
+		return fmt.Errorf("failed to update user in db: %w", err)
+	}
+	if commandTag.RowsAffected() == 0 {
+		return &ErrUserNotFound{UserID: user.ID}
+	}
+	return nil
+}

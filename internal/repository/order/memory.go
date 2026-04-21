@@ -60,3 +60,21 @@ func (r *MemoryRepository) GetOrdersByUserID(_ context.Context, userID string) (
 	}
 	return orders, nil
 }
+
+func (r *MemoryRepository) GetOrdersWithdrawnByUserID(_ context.Context, userID string) ([]*models.Order, error) {
+	orders := make([]*models.Order, 0)
+	for _, order := range r.orders {
+		if order.UserID == userID && order.Withdrawn > 0 {
+			orders = append(orders, order)
+		}
+	}
+	return orders, nil
+}
+
+func (r *MemoryRepository) UpdateOrder(_ context.Context, order *models.Order) error {
+	if _, exists := r.orders[order.ID]; !exists {
+		return fmt.Errorf("order with ID %s does not exist", order.ID)
+	}
+	r.orders[order.ID] = order
+	return nil
+}

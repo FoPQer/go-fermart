@@ -33,18 +33,22 @@ func (s *stubOrderRepo) GetOrdersByUserID(ctx context.Context, userID string) ([
 	return nil, nil
 }
 
-func (s *stubOrderRepo) GetOrderByOrderID(ctx context.Context, orderID string) (*models.Order, error) {
-	s.getOrderByIDCall = true
-	if s.getOrderByIDFn != nil {
-		return s.getOrderByIDFn(ctx, orderID)
+func (s *stubOrderRepo) GetOrdersWithdrawnByUserID(ctx context.Context, userID string) ([]*models.Order, error) {
+	s.getOrdersCalled = true
+	if s.getOrdersByUser != nil {
+		return s.getOrdersByUser(ctx, userID)
 	}
 	return nil, nil
+}
+
+func (s *stubOrderRepo) UpdateOrder(ctx context.Context, order *models.Order) error {
+	return nil
 }
 
 func TestOrderService_checkOrder(t *testing.T) {
 	t.Parallel()
 
-	svc := NewOrderService(&stubOrderRepo{})
+	svc := NewOrderService(&stubOrderRepo{}, nil)
 	tests := []struct {
 		name    string
 		orderID string
@@ -74,7 +78,7 @@ func TestOrderService_LoadOrder(t *testing.T) {
 
 	t.Run("returns wrong format error and skips repo for invalid id", func(t *testing.T) {
 		repo := &stubOrderRepo{}
-		svc := NewOrderService(repo)
+		svc := NewOrderService(repo, nil)
 
 		order, err := svc.LoadOrder(context.Background(), "user-1", "invalid")
 		if order != nil {
@@ -106,7 +110,7 @@ func TestOrderService_LoadOrder(t *testing.T) {
 				return want, nil
 			},
 		}
-		svc := NewOrderService(repo)
+		svc := NewOrderService(repo, nil)
 
 		got, err := svc.LoadOrder(context.Background(), "user-1", "79927398713")
 		if err != nil {
@@ -123,7 +127,7 @@ func TestOrderService_LoadOrder(t *testing.T) {
 				return nil, errors.New("db unavailable")
 			},
 		}
-		svc := NewOrderService(repo)
+		svc := NewOrderService(repo, nil)
 
 		_, err := svc.LoadOrder(context.Background(), "user-1", "79927398713")
 		if err == nil {
@@ -147,7 +151,7 @@ func TestOrderService_GetOrdersAndWithdrawals(t *testing.T) {
 			return want, nil
 		},
 	}
-	svc := NewOrderService(repo)
+	svc := NewOrderService(repo, nil)
 
 	orders, err := svc.GetOrders(context.Background(), "user-1")
 	if err != nil {

@@ -68,3 +68,13 @@ func (r *MemoryRepository) GetUserByID(_ context.Context, userID string) (*model
 	}
 	return nil, &ErrUserNotFound{UserID: userID}
 }
+
+func (r *MemoryRepository) UpdateUser(_ context.Context, user *models.User) error {
+	for username, u := range r.users {
+		if u.ID == user.ID {
+			r.users[username] = user
+			return nil
+		}
+	}
+	return &ErrUserNotFound{UserID: user.ID}
+}
