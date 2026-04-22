@@ -32,7 +32,7 @@ func main() {
 	orderRepository := repoFactory.GetOrderRepository()
 
 	userService := services.NewUserService(userRepository)
-	orderService := services.NewOrderService(orderRepository, userService)
+	orderService := services.NewOrderService(orderRepository, userService, config)
 	claimsService := auth.NewClaimsService()
 
 	orderHandler := handlers.NewOrderHandler(orderService)
@@ -42,6 +42,7 @@ func main() {
 	r := routes.NewRoutes(orderHandler, balanceHandler, authHandler, config)
 	e := r.SetupRoutes()
 	slog.Info("Starting server on ", "address", config.GetRunAddr())
+	slog.Info("Starting accrual on ", "address", config.GetAccrualAddress())
 
 	// Start server
 	if err := e.Start(config.GetRunAddr()); err != nil {

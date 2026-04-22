@@ -1,6 +1,7 @@
 package services
 
 import (
+	"FoPQer/go-fermart/internal/config"
 	"FoPQer/go-fermart/internal/models"
 	"FoPQer/go-fermart/internal/repository/order"
 	"context"
@@ -27,10 +28,11 @@ type OrderDetails struct {
 type OrderService struct {
 	repo order.Repository
 	userService *UserService
+	config *config.Config
 }
 
-func NewOrderService(repo order.Repository, userService *UserService) *OrderService {
-	return &OrderService{repo: repo, userService: userService}
+func NewOrderService(repo order.Repository, userService *UserService, config *config.Config) *OrderService {
+	return &OrderService{repo: repo, userService: userService, config: config}
 }
 
 func (s *OrderService) LoadOrder(ctx context.Context, userID string, orderID string) (*models.Order, error) {
@@ -47,7 +49,7 @@ func (s *OrderService) LoadOrder(ctx context.Context, userID string, orderID str
 	go func(order *models.Order) {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		resp, err := http.Get(fmt.Sprintf("http://localhost:8080/api/orders/%s", order.ID))
+		resp, err := http.Get(fmt.Sprintf("http://%s/api/orders/%s", s.config.GetAccrualAddress(), order.ID))
 		if err != nil {
 			fmt.Printf("failed to fetch order details: %v\n", err)
 			return

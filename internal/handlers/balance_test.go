@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"FoPQer/go-fermart/internal/config"
 	"FoPQer/go-fermart/internal/models"
 	userRepo "FoPQer/go-fermart/internal/repository/user"
 	"FoPQer/go-fermart/internal/services"
@@ -115,7 +116,7 @@ func (s *stubBalanceOrderRepo) UpdateOrder(ctx context.Context, order *models.Or
 
 func newBalanceHandlerForTest(userRepo *stubBalanceUserRepo, orderRepo *stubBalanceOrderRepo) *BalanceHandler {
 	userService := services.NewUserService(userRepo)
-	orderService := services.NewOrderService(orderRepo, userService)
+	orderService := services.NewOrderService(orderRepo, userService, &config.Config{AccrualAddress: "localhost:8080"})
 	return NewBalanceHandler(userService, orderService)
 }
 

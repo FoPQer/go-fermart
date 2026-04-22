@@ -1,6 +1,7 @@
 package services
 
 import (
+	"FoPQer/go-fermart/internal/config"
 	"FoPQer/go-fermart/internal/models"
 	"context"
 	"errors"
@@ -54,7 +55,7 @@ func (s *stubOrderRepo) UpdateOrder(ctx context.Context, order *models.Order) er
 func TestOrderService_checkOrder(t *testing.T) {
 	t.Parallel()
 
-	svc := NewOrderService(&stubOrderRepo{}, nil)
+	svc := NewOrderService(&stubOrderRepo{}, nil, &config.Config{AccrualAddress: "localhost:8080"})
 	tests := []struct {
 		name    string
 		orderID string
@@ -130,7 +131,7 @@ func TestOrderService_LoadOrder(t *testing.T) {
 				}
 			}
 
-			svc := NewOrderService(repo, nil)
+			svc := NewOrderService(repo, nil, &config.Config{AccrualAddress: "localhost:8080"})
 			got, err := svc.LoadOrder(context.Background(), "user-1", tt.orderID)
 
 			if tt.wantWrongFormatErr {
@@ -197,7 +198,7 @@ func TestOrderService_GetOrders(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewOrderService(tt.repo, nil)
+			svc := NewOrderService(tt.repo, nil, &config.Config{AccrualAddress: "localhost:8080"})
 			orders, err := svc.GetOrders(context.Background(), "user-1")
 
 			if tt.wantErrSubstr != "" {
@@ -259,7 +260,7 @@ func TestOrderService_GetWithdrawals(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewOrderService(tt.repo, nil)
+			svc := NewOrderService(tt.repo, nil, &config.Config{AccrualAddress: "localhost:8080"})
 			withdrawals, err := svc.GetWithdrawals(context.Background(), "user-1")
 
 			if tt.wantErrSubstr != "" {
@@ -319,7 +320,7 @@ func TestOrderService_UpdateOrder(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewOrderService(tt.repo, nil)
+			svc := NewOrderService(tt.repo, nil, &config.Config{AccrualAddress: "localhost:8080"})
 			err := svc.UpdateOrder(context.Background(), &models.Order{ID: "79927398713"})
 
 			if tt.wantErrSubstr != "" {

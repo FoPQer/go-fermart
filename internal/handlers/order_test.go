@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"FoPQer/go-fermart/internal/config"
 	"FoPQer/go-fermart/internal/models"
 	orderRepo "FoPQer/go-fermart/internal/repository/order"
 	"FoPQer/go-fermart/internal/services"
@@ -64,7 +65,7 @@ func (s *stubOrderHandlerOrderRepo) UpdateOrder(ctx context.Context, order *mode
 
 func newOrderHandlerForTest(orderRepo *stubOrderHandlerOrderRepo) *OrderHandler {
 	userService := services.NewUserService(&stubOrderHandlerUserRepo{})
-	orderService := services.NewOrderService(orderRepo, userService)
+	orderService := services.NewOrderService(orderRepo, userService, &config.Config{AccrualAddress: "localhost:8080"})
 	return NewOrderHandler(orderService)
 }
 
