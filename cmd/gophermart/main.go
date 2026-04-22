@@ -41,9 +41,10 @@ func main() {
 
 	r := routes.NewRoutes(orderHandler, balanceHandler, authHandler, config)
 	e := r.SetupRoutes()
+	slog.Info("Starting server on ", "address", config.GetRunAddr())
 
 	// Start server
-	if err := e.Start(":8081"); err != nil {
+	if err := e.Start(config.GetRunAddr()); err != nil {
 		slog.Error("failed to start server", "error", err)
 	}
 }

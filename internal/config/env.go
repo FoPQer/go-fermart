@@ -18,6 +18,7 @@ func NewConfig() *Config {
 }
 
 func (c *Config) Load() {
+	flags.ParseFlags()
 	c.SecretKey = []byte(os.Getenv("SECRET_KEY"))
 	c.RunAddr = os.Getenv("RUN_ADDRESS")
 	c.DatabaseURI = os.Getenv("DATABASE_URI")
