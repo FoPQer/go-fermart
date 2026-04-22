@@ -49,7 +49,7 @@ func (s *OrderService) LoadOrder(ctx context.Context, userID string, orderID str
 	go func(order *models.Order) {
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		resp, err := http.Get(fmt.Sprintf("http://%s/api/orders/%s", s.config.GetAccrualAddress(), order.ID))
+		resp, err := http.Get(fmt.Sprintf("%s/api/orders/%s", s.config.GetAccrualAddress(), order.ID))
 		if err != nil {
 			fmt.Printf("failed to fetch order details: %v\n", err)
 			return
@@ -64,8 +64,6 @@ func (s *OrderService) LoadOrder(ctx context.Context, userID string, orderID str
 				return
 			}
 
-			// Update order status and accrual in the repository
-			// This part is simplified and should ideally be done through a method in the repository
 			order.Status = orderDetails.Status
 			now := time.Now()
 			order.ProcessedAt = &now
