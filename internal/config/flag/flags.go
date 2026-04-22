@@ -35,9 +35,9 @@ func SetFlagAccrualAddress(newFlagAccrualAddress string) {
 }
 
 func ParseFlags() {
-	flag.StringVar(&flagRunAddr, "a", "localhost:8081", "address and port to run server")
+	flag.StringVar(&flagRunAddr, "a", "localhost:8080", "address and port to run server")
 	flag.StringVar(&flagDatabaseURI, "d", "", "database connection string")
-	flag.StringVar(&flagAccrualAddress, "r", "http://localhost:8080", "accrual system address")
+	flag.StringVar(&flagAccrualAddress, "r", "localhost:8081", "accrual system address")
 
 	flag.Parse()
 }
