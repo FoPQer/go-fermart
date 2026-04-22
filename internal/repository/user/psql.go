@@ -7,11 +7,17 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+type pgxQuerier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 type PsqlRepository struct {
-	conn *pgxpool.Pool
+	conn pgxQuerier
 }
 
 func NewPgsqlRepository(conn *pgxpool.Pool) *PsqlRepository {

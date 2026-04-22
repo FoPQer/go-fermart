@@ -39,7 +39,8 @@ func (h *AuthHandler) Register(c *echo.Context) error {
 		return err
 	}
 	userID, err := h.userService.Register(c.Request().Context(), req.Username, req.Password)
-	if errors.Is(err, &user.ErrUserAlreadyExists{Username: req.Username}) {
+	var alreadyExistsErr *user.ErrUserAlreadyExists
+	if errors.As(err, &alreadyExistsErr) {
 		c.Response().WriteHeader(http.StatusConflict)
 		return err
 	}
@@ -67,7 +68,8 @@ func (h *AuthHandler) Login(c *echo.Context) error {
 		return err
 	}
 	userID, err := h.userService.Login(c.Request().Context(), req.Username, req.Password)
-	if errors.Is(err, &user.ErrInvalidCredentials{}) {
+	var invalidCredsErr *user.ErrInvalidCredentials
+	if errors.As(err, &invalidCredsErr) {
 		c.Response().WriteHeader(http.StatusUnauthorized)
 		return err
 	}
