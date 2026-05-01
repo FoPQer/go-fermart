@@ -85,9 +85,8 @@ func (h *BalanceHandler) Withdraw(c *echo.Context) error {
 
 	err = h.userService.DoWithdraw(c.Request().Context(), userID, req.Sum)
 
-	var errNotEnoughFunds error = models.ErrNotEnoughFunds
 	if err != nil {
-		if errors.Is(err, errNotEnoughFunds) {
+		if errors.Is(err, models.ErrNotEnoughFunds) {
 			return c.String(http.StatusPaymentRequired, "Insufficient balance")
 		}
 		slog.Info("failed to process withdrawal for userID", "userID", userID, "error", err)
