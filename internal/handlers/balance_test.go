@@ -107,6 +107,10 @@ func (s *stubBalanceOrderRepo) GetOrdersWithdrawnByUserID(ctx context.Context, u
 	return nil, nil
 }
 
+func (s *stubBalanceOrderRepo) GetUnprocessedOrders(ctx context.Context) ([]*models.Order, error) {
+	return nil, nil
+}
+
 func (s *stubBalanceOrderRepo) UpdateOrder(ctx context.Context, order *models.Order) error {
 	if s.updateOrderFn != nil {
 		return s.updateOrderFn(ctx, order)
@@ -116,7 +120,7 @@ func (s *stubBalanceOrderRepo) UpdateOrder(ctx context.Context, order *models.Or
 
 func newBalanceHandlerForTest(userRepo *stubBalanceUserRepo, orderRepo *stubBalanceOrderRepo) *BalanceHandler {
 	userService := services.NewUserService(userRepo)
-	orderService := services.NewOrderService(orderRepo, userService, &config.Config{AccrualAddress: "localhost:8080"})
+	orderService := services.NewOrderService(orderRepo, userService, &config.Config{AccrualAddress: "localhost:8080"}, nil)
 	return NewBalanceHandler(userService, orderService)
 }
 
@@ -172,7 +176,7 @@ func TestBalanceHandler_GetBalance(t *testing.T) {
 				},
 			},
 			wantStatus: http.StatusInternalServerError,
-			wantBody:   "Failed to get user info",
+			wantBody:   http.StatusText(http.StatusInternalServerError),
 		},
 		{
 			name:   "returns balance",
@@ -259,9 +263,9 @@ func TestBalanceHandler_Withdraw(t *testing.T) {
 			wantLoadOrder: boolPtr(false),
 		},
 		{
-			name:   "internal error on load order failure",
-			userID: "u-1",
-			body:   `{"order":"` + validOrderID + `","sum":10}`,
+			name:     "internal error on load order failure",
+			userID:   "u-1",
+			body:     `{"order":"` + validOrderID + `","sum":10}`,
 			userRepo: &stubBalanceUserRepo{},
 			orderRepo: &stubBalanceOrderRepo{
 				loadOrderFn: func(ctx context.Context, userID string, orderID string) (*models.Order, error) {
@@ -269,7 +273,7 @@ func TestBalanceHandler_Withdraw(t *testing.T) {
 				},
 			},
 			wantStatus:    http.StatusInternalServerError,
-			wantBody:      "Failed to load order",
+			wantBody:      http.StatusText(http.StatusInternalServerError),
 			wantLoadOrder: boolPtr(true),
 		},
 		{
@@ -308,7 +312,7 @@ func TestBalanceHandler_Withdraw(t *testing.T) {
 				},
 			},
 			wantStatus:    http.StatusInternalServerError,
-			wantBody:      "Failed to process withdrawal",
+			wantBody:      http.StatusText(http.StatusInternalServerError),
 			wantLoadOrder: boolPtr(true),
 		},
 		{
@@ -329,7 +333,7 @@ func TestBalanceHandler_Withdraw(t *testing.T) {
 				},
 			},
 			wantStatus:    http.StatusInternalServerError,
-			wantBody:      "Failed to update order with withdrawal info",
+			wantBody:      http.StatusText(http.StatusInternalServerError),
 			wantLoadOrder: boolPtr(true),
 		},
 		{
@@ -406,7 +410,7 @@ func TestBalanceHandler_GetWithdrawals(t *testing.T) {
 				},
 			},
 			wantStatus: http.StatusInternalServerError,
-			wantBody:   "Failed to get withdrawals",
+			wantBody:   http.StatusText(http.StatusInternalServerError),
 		},
 		{
 			name:   "no content when withdrawals are empty",

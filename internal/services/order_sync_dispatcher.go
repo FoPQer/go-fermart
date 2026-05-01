@@ -4,13 +4,16 @@ import (
 	"FoPQer/go-fermart/internal/config"
 	"FoPQer/go-fermart/internal/models"
 	"FoPQer/go-fermart/internal/repository/order"
+	"FoPQer/go-fermart/internal/txutil"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -29,47 +32,103 @@ type WorkerPoolOrderSyncDispatcher struct {
 	repo        order.Repository
 	userService *UserService
 	config      *config.Config
+	transactor  txutil.Transactor
 	httpClient  *http.Client
 	jobs        chan *models.Order
+	done        chan struct{}
 	workers     sync.WaitGroup
 	closeOnce   sync.Once
+	enqueueMu   sync.RWMutex
+	closed      bool
+	pausedUntil int64
 }
 
-func NewOrderSyncDispatcher(repo order.Repository, userService *UserService, config *config.Config) OrderSyncDispatcher {
+func NewOrderSyncDispatcher(repo order.Repository, userService *UserService, config *config.Config, transactor txutil.Transactor) OrderSyncDispatcher {
 	dispatcher := &WorkerPoolOrderSyncDispatcher{
 		repo:        repo,
 		userService: userService,
 		config:      config,
+		transactor:  transactor,
 		httpClient:  &http.Client{Timeout: orderSyncTimeout},
 		jobs:        make(chan *models.Order, defaultOrderQueueSize),
+		done:        make(chan struct{}),
 	}
-	dispatcher.startWorkers(defaultOrderWorkerCount)
+	dispatcher.startWorkers(context.Background(), defaultOrderWorkerCount)
 	return dispatcher
 }
 
 func (d *WorkerPoolOrderSyncDispatcher) Enqueue(order *models.Order) {
-	d.jobs <- order
+	if order == nil || isTerminalOrderStatus(order.Status) {
+		return
+	}
+
+	d.enqueueMu.RLock()
+	defer d.enqueueMu.RUnlock()
+	if d.closed {
+		return
+	}
+
+	select {
+	case d.jobs <- order:
+	case <-d.done:
+	}
 }
 
 func (d *WorkerPoolOrderSyncDispatcher) Close() {
 	d.closeOnce.Do(func() {
+		d.enqueueMu.Lock()
+		d.closed = true
+		close(d.done)
 		close(d.jobs)
+		d.enqueueMu.Unlock()
 		d.workers.Wait()
 	})
 }
 
-func (d *WorkerPoolOrderSyncDispatcher) startWorkers(count int) {
+func (d *WorkerPoolOrderSyncDispatcher) startWorkers(ctx context.Context, count int) {
 	for range count {
 		d.workers.Go(func() {
 			for order := range d.jobs {
-				d.syncOrder(order)
+				if !d.waitIfPaused() {
+					return
+				}
+				d.syncOrder(ctx, order)
 			}
 		})
 	}
 }
 
-func (d *WorkerPoolOrderSyncDispatcher) syncOrder(order *models.Order) {
-	ctx, cancel := context.WithTimeout(context.Background(), orderSyncTimeout)
+func (d *WorkerPoolOrderSyncDispatcher) waitIfPaused() bool {
+	for {
+		pauseUntil := atomic.LoadInt64(&d.pausedUntil)
+		if pauseUntil == 0 {
+			return true
+		}
+
+		pauseUntilTime := time.Unix(0, pauseUntil)
+		remaining := time.Until(pauseUntilTime)
+		if remaining <= 0 {
+			return true
+		}
+
+		timer := time.NewTimer(remaining)
+		select {
+		case <-timer.C:
+			timer.Stop()
+		case <-d.done:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			return false
+		}
+	}
+}
+
+func (d *WorkerPoolOrderSyncDispatcher) syncOrder(ctx context.Context, order *models.Order) {
+	ctx, cancel := context.WithTimeout(ctx, orderSyncTimeout)
 	defer cancel()
 
 	orderURL, err := d.accrualOrderURL(order.ID)
@@ -107,23 +166,88 @@ func (d *WorkerPoolOrderSyncDispatcher) syncOrder(order *models.Order) {
 				slog.Error("failed to add funds to user", "orderID", order.ID, "error", "user service is nil")
 				return
 			}
-			if err := d.userService.DoDeposit(ctx, order.UserID, orderDetails.Accrual); err != nil {
-				slog.Error("failed to add funds to user", "orderID", order.ID, "error", err)
-				return
-			}
 			order.Accrual = orderDetails.Accrual
 		}
-		if err := d.repo.UpdateOrder(ctx, order); err != nil {
-			slog.Error("failed to update order", "orderID", order.ID, "error", err)
+
+		if err := d.withTransaction(ctx, func(txCtx context.Context) error {
+			if order.Accrual > 0 {
+				if err := d.userService.DoDeposit(txCtx, order.UserID, order.Accrual); err != nil {
+					return fmt.Errorf("deposit accrual: %w", err)
+				}
+			}
+			return d.repo.UpdateOrder(txCtx, order)
+		}); err != nil {
+			slog.Error("failed to apply accrual", "orderID", order.ID, "error", err)
 			return
 		}
 	case http.StatusNoContent:
 		slog.Info("order is not registered", "orderID", order.ID)
 	case http.StatusTooManyRequests:
+		d.applyRetryAfter(resp.Header.Get("Retry-After"))
 		slog.Info("too many requests for order", "orderID", order.ID)
 	default:
 		slog.Info("unexpected status code for order", "statusCode", resp.StatusCode, "orderID", order.ID)
 	}
+}
+
+func (d *WorkerPoolOrderSyncDispatcher) applyRetryAfter(retryAfterHeader string) {
+	retryAfter := parseRetryAfter(retryAfterHeader)
+	if retryAfter <= 0 {
+		return
+	}
+
+	newPauseUntil := time.Now().Add(retryAfter).UnixNano()
+	for {
+		current := atomic.LoadInt64(&d.pausedUntil)
+		if current >= newPauseUntil {
+			return
+		}
+		if atomic.CompareAndSwapInt64(&d.pausedUntil, current, newPauseUntil) {
+			return
+		}
+	}
+}
+
+func (d *WorkerPoolOrderSyncDispatcher) withTransaction(ctx context.Context, fn func(context.Context) error) error {
+	if d.transactor == nil {
+		return fn(ctx)
+	}
+	return d.transactor.WithinTransaction(ctx, fn)
+}
+
+func isTerminalOrderStatus(status models.OrderStatus) bool {
+	switch status {
+	case models.OrderStatusInvalid, models.OrderStatusProcessed:
+		return true
+	default:
+		return false
+	}
+}
+
+func parseRetryAfter(retryAfterHeader string) time.Duration {
+	trimmed := strings.TrimSpace(retryAfterHeader)
+	if trimmed == "" {
+		return 0
+	}
+
+	if seconds, err := strconv.Atoi(trimmed); err == nil {
+		if seconds <= 0 {
+			return 0
+		}
+		return time.Duration(seconds) * time.Second
+	}
+
+	retryAfterTime, err := http.ParseTime(trimmed)
+	if err != nil {
+		return 0
+	}
+
+	duration := time.Until(retryAfterTime)
+	if duration <= 0 {
+		return 0
+	}
+
+	return duration
 }
 
 func (d *WorkerPoolOrderSyncDispatcher) accrualOrderURL(orderID string) (string, error) {

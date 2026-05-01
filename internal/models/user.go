@@ -1,19 +1,12 @@
 package models
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
 
-type ErrNotEnoughFunds struct {
-	UserID string
-	Sum    float32
-}
-
-func (e *ErrNotEnoughFunds) Error() string {
-	return fmt.Sprintf("user %s has insufficient funds: %.2f", e.UserID, e.Sum)
-}
-
+var ErrNotEnoughFunds = errors.New("not enough funds")
 type User struct {
 	ID           string  `json:"id"`
 	Username     string  `json:"username"`
@@ -28,7 +21,7 @@ func (u *User) AddBalance(amount float32) {
 
 func (u *User) Withdraw(amount float32) error {
 	if u.Balance < amount {
-		return &ErrNotEnoughFunds{UserID: u.ID, Sum: amount}
+		return ErrNotEnoughFunds
 	}
 	u.Balance -= amount
 	u.SumWithdrawn += amount

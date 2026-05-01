@@ -2,6 +2,7 @@ package user
 
 import (
 	"FoPQer/go-fermart/internal/models"
+	"FoPQer/go-fermart/internal/txutil"
 	"context"
 	"errors"
 	"fmt"
@@ -22,6 +23,13 @@ type PsqlRepository struct {
 
 func NewPgsqlRepository(conn *pgxpool.Pool) *PsqlRepository {
 	return &PsqlRepository{conn: conn}
+}
+
+func (r *PsqlRepository) querier(ctx context.Context) pgxQuerier {
+	if tx, ok := txutil.TxFromContext(ctx); ok {
+		return tx
+	}
+	return r.conn
 }
 
 func (r *PsqlRepository) Register(ctx context.Context, username, password string) (string, error) {
@@ -51,7 +59,7 @@ func (r *PsqlRepository) Login(ctx context.Context, username, password string) (
 
 func (r *PsqlRepository) GetUserByID(ctx context.Context, userID string) (*models.User, error) {
 	var user models.User
-	err := r.conn.QueryRow(ctx, "SELECT id, username, balance, sumWithdrawn FROM users WHERE id = $1", userID).Scan(&user.ID, &user.Username, &user.Balance, &user.SumWithdrawn)
+	err := r.querier(ctx).QueryRow(ctx, "SELECT id, username, balance, sumWithdrawn FROM users WHERE id = $1", userID).Scan(&user.ID, &user.Username, &user.Balance, &user.SumWithdrawn)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, &ErrUserNotFound{UserID: userID}
@@ -62,7 +70,7 @@ func (r *PsqlRepository) GetUserByID(ctx context.Context, userID string) (*model
 }
 
 func (r *PsqlRepository) UpdateUser(ctx context.Context, user *models.User) error {
-	commandTag, err := r.conn.Exec(ctx, "UPDATE users SET balance = $1, sumWithdrawn = $2 WHERE id = $3", user.Balance, user.SumWithdrawn, user.ID)
+	commandTag, err := r.querier(ctx).Exec(ctx, "UPDATE users SET balance = $1, sumWithdrawn = $2 WHERE id = $3", user.Balance, user.SumWithdrawn, user.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update user in db: %w", err)
 	}

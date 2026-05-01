@@ -17,12 +17,14 @@ func NewConfig() *Config {
 	return &Config{}
 }
 
-func (c *Config) Load() {
+func Load() *Config {
 	flags.ParseFlags()
+	c := NewConfig()
 	c.SecretKey = []byte(os.Getenv("SECRET_KEY"))
 	c.RunAddr = os.Getenv("RUN_ADDRESS")
 	c.DatabaseURI = os.Getenv("DATABASE_URI")
 	c.AccrualAddress = os.Getenv("ACCRUAL_SYSTEM_ADDRESS")
+	return c
 }
 
 func (c *Config) GetSecretKey() []byte {

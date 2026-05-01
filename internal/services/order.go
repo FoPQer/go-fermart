@@ -4,6 +4,7 @@ import (
 	"FoPQer/go-fermart/internal/config"
 	"FoPQer/go-fermart/internal/models"
 	"FoPQer/go-fermart/internal/repository/order"
+	"FoPQer/go-fermart/internal/txutil"
 	"context"
 	"fmt"
 )
@@ -23,18 +24,23 @@ type OrderDetails struct {
 }
 
 type OrderService struct {
-	repo        order.Repository
+	repo       order.Repository
 	dispatcher OrderSyncDispatcher
+	collector  *OrderSyncCollector
 }
 
-func NewOrderService(repo order.Repository, userService *UserService, config *config.Config) *OrderService {
+func NewOrderService(repo order.Repository, userService *UserService, config *config.Config, transactor txutil.Transactor) *OrderService {
+	dispatcher := NewOrderSyncDispatcher(repo, userService, config, transactor)
+	collector := NewOrderSyncCollector(repo, dispatcher, defaultOrderScanInterval)
 	return &OrderService{
-		repo:        repo,
-		dispatcher: NewOrderSyncDispatcher(repo, userService, config),
+		repo:       repo,
+		dispatcher: dispatcher,
+		collector:  collector,
 	}
 }
 
 func (s *OrderService) Close() {
+	s.collector.Close()
 	s.dispatcher.Close()
 }
 
@@ -48,8 +54,6 @@ func (s *OrderService) LoadOrder(ctx context.Context, userID string, orderID str
 	if err != nil {
 		return order, fmt.Errorf("failed to load order: %w", err)
 	}
-
-	s.dispatchOrderSync(order)
 
 	return order, nil
 }
@@ -107,21 +111,4 @@ func (s *OrderService) checkOrder(orderID string) error {
 	}
 
 	return nil
-}
-
-func (s *OrderService) dispatchOrderSync(order *models.Order) {
-	if order == nil || s.isTerminalStatus(order.Status) {
-		return
-	}
-
-	s.dispatcher.Enqueue(order)
-}
-
-func (s *OrderService) isTerminalStatus(status models.OrderStatus) bool {
-	switch status {
-	case models.OrderStatusInvalid, models.OrderStatusProcessed:
-		return true
-	default:
-		return false
-	}
 }

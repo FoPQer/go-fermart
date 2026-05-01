@@ -6,7 +6,7 @@ import (
 	"FoPQer/go-fermart/internal/repository/user"
 	"FoPQer/go-fermart/internal/services"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -52,7 +52,8 @@ func (h *BalanceHandler) GetBalance(c *echo.Context) error {
 	if errors.As(err, &errUserNotFound) {
 		return c.String(http.StatusUnauthorized, "User not found")
 	} else if err != nil {
-		return c.String(http.StatusInternalServerError, "Failed to get user info")
+		slog.Error("failed to get user info", "userID", userID, "error", err)
+		return c.String(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 	resp := GetBalanceResponse{
 		Current:   user.Balance,
@@ -71,27 +72,32 @@ func (h *BalanceHandler) Withdraw(c *echo.Context) error {
 		return c.String(http.StatusBadRequest, "Invalid request body")
 	}
 	order, err := h.orderService.LoadOrder(c.Request().Context(), userID, req.Order)
-	errWrongOrderIDFormat := &services.ErrWrongOrderIDFormat{}
-	if errors.As(err, &errWrongOrderIDFormat) {
-		log.Printf("wrong order ID format: %s", req.Order)
-		return c.String(http.StatusUnprocessableEntity, "Wrong order ID format")
-	} else if err != nil {
-		log.Printf("failed to load orderID %s: %v", req.Order, err)
-		return c.String(http.StatusInternalServerError, "Failed to load order")
-	}
-	err = h.userService.DoWithdraw(c.Request().Context(), userID, req.Sum)
-	errNotEnoughFunds := &models.ErrNotEnoughFunds{}
-	if errors.As(err, &errNotEnoughFunds) {
-		return c.String(http.StatusPaymentRequired, "Insufficient balance")
-	} else if err != nil {
-		log.Printf("failed to process withdrawal for userID %s: %v", userID, err)
-		return c.String(http.StatusInternalServerError, "Failed to process withdrawal")
-	}
-	order.Withdrawn = req.Sum
 
+	var errWrongOrderIDFormat *services.ErrWrongOrderIDFormat
+	if err != nil {
+		if errors.As(err, &errWrongOrderIDFormat) {
+			slog.Info("wrong order ID format", "orderID", req.Order)
+			return c.String(http.StatusUnprocessableEntity, "Wrong order ID format")
+		}
+		slog.Info("failed to load orderID", "orderID", req.Order, "error", err)
+		return c.String(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+	}
+
+	err = h.userService.DoWithdraw(c.Request().Context(), userID, req.Sum)
+
+	var errNotEnoughFunds error = models.ErrNotEnoughFunds
+	if err != nil {
+		if errors.Is(err, errNotEnoughFunds) {
+			return c.String(http.StatusPaymentRequired, "Insufficient balance")
+		}
+		slog.Info("failed to process withdrawal for userID", "userID", userID, "error", err)
+		return c.String(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+	}
+
+	order.Withdrawn = req.Sum
 	if err := h.orderService.UpdateOrder(c.Request().Context(), order); err != nil {
-		log.Printf("failed to update order %s with withdrawal info: %v", order.ID, err)
-		return c.String(http.StatusInternalServerError, "Failed to update order with withdrawal info")
+		slog.Error("failed to update order with withdrawal info", "orderID", order.ID, "error", err)
+		return c.String(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 
 	return c.JSON(http.StatusOK, order)
@@ -104,8 +110,8 @@ func (h *BalanceHandler) GetWithdrawals(c *echo.Context) error {
 	}
 	withdrawals, err := h.orderService.GetWithdrawals(c.Request().Context(), userID)
 	if err != nil {
-		log.Printf("failed to get withdrawals for userID %s: %v", userID, err)
-		return c.String(http.StatusInternalServerError, "Failed to get withdrawals")
+		slog.Error("failed to get withdrawals", "userID", userID, "error", err)
+		return c.String(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 
 	responses := make([]WithdrawResponse, 0)

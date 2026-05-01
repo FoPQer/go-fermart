@@ -3,6 +3,7 @@ package repository
 import (
 	"FoPQer/go-fermart/internal/repository/order"
 	"FoPQer/go-fermart/internal/repository/user"
+	"FoPQer/go-fermart/internal/txutil"
 	"log"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -38,4 +39,11 @@ func (f *Factory) GetOrderRepository() order.Repository {
 		repo = order.NewMemoryRepository()
 	}
 	return repo
+}
+
+func (f *Factory) GetTransactor() txutil.Transactor {
+	if f.conn != nil {
+		return txutil.NewPgsqlTransactor(f.conn)
+	}
+	return txutil.NoopTransactor{}
 }

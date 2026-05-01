@@ -61,7 +61,7 @@ func (s *UserService) DoWithdraw(ctx context.Context, userID string, sum float32
 	}
 
 	if user.Balance < sum {
-		return &models.ErrNotEnoughFunds{UserID: userID, Sum: sum}
+		return models.ErrNotEnoughFunds
 	}
 
 	if err := user.Withdraw(sum); err != nil {

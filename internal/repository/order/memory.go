@@ -41,12 +41,12 @@ func (r *MemoryRepository) LoadOrder(_ context.Context, userID string, orderID s
 		}
 		return order, &ErrOrderAlreadyExists{OrderID: orderID}
 	}
-	
+
 	r.orders[orderID] = &models.Order{
-		ID:          orderID,
-		UserID:      userID,
-		Status:      models.OrderStatusNew,
-		UploadedAt:  time.Now(),
+		ID:         orderID,
+		UserID:     userID,
+		Status:     models.OrderStatusNew,
+		UploadedAt: time.Now(),
 	}
 	return r.orders[orderID], nil
 }
@@ -65,6 +65,17 @@ func (r *MemoryRepository) GetOrdersWithdrawnByUserID(_ context.Context, userID 
 	orders := make([]*models.Order, 0)
 	for _, order := range r.orders {
 		if order.UserID == userID && order.Withdrawn > 0 {
+			orders = append(orders, order)
+		}
+	}
+	return orders, nil
+}
+
+func (r *MemoryRepository) GetUnprocessedOrders(_ context.Context) ([]*models.Order, error) {
+	orders := make([]*models.Order, 0)
+	for _, order := range r.orders {
+		switch order.Status {
+		case models.OrderStatusNew, models.OrderStatusRegistered, models.OrderStatusProcessing:
 			orders = append(orders, order)
 		}
 	}
