@@ -5,19 +5,22 @@ import (
 	"FoPQer/go-fermart/internal/models"
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 type stubOrderRepo struct {
-	loadOrderFn      func(ctx context.Context, userID string, orderID string) (*models.Order, error)
-	getOrdersByUser  func(ctx context.Context, userID string) ([]*models.Order, error)
+	loadOrderFn          func(ctx context.Context, userID string, orderID string) (*models.Order, error)
+	getOrdersByUser      func(ctx context.Context, userID string) ([]*models.Order, error)
 	getWithdrawalsByUser func(ctx context.Context, userID string) ([]*models.Order, error)
-	updateOrderFn    func(ctx context.Context, order *models.Order) error
-	loadOrderCalled  bool
-	getOrdersCalled  bool
+	updateOrderFn        func(ctx context.Context, order *models.Order) error
+	loadOrderCalled      bool
+	getOrdersCalled      bool
 	getWithdrawalsCalled bool
-	updateOrderCalled bool
+	updateOrderCalled    bool
 }
 
 func (s *stubOrderRepo) LoadOrder(ctx context.Context, userID string, orderID string) (*models.Order, error) {
@@ -56,6 +59,7 @@ func TestOrderService_checkOrder(t *testing.T) {
 	t.Parallel()
 
 	svc := NewOrderService(&stubOrderRepo{}, nil, &config.Config{AccrualAddress: "localhost:8080"})
+	t.Cleanup(svc.Close)
 	tests := []struct {
 		name    string
 		orderID string
@@ -100,16 +104,18 @@ func TestOrderService_LoadOrder(t *testing.T) {
 			wantRepoCalled:     false,
 		},
 		{
-			name:    "loads order successfully",
-			orderID: "79927398713",
-			wantOrder: &models.Order{ID: "79927398713", UserID: "user-1", Status: "NEW"},
+			name:           "loads order successfully",
+			orderID:        "79927398713",
+			wantOrder:      &models.Order{ID: "79927398713", UserID: "user-1", Status: "NEW"},
 			wantRepoCalled: true,
 		},
 		{
-			name:          "wraps repository errors",
-			orderID:       "79927398713",
-			repo:          &stubOrderRepo{loadOrderFn: func(ctx context.Context, userID string, orderID string) (*models.Order, error) { return nil, errors.New("db unavailable") }},
-			wantErrSubstr: "failed to load order",
+			name:    "wraps repository errors",
+			orderID: "79927398713",
+			repo: &stubOrderRepo{loadOrderFn: func(ctx context.Context, userID string, orderID string) (*models.Order, error) {
+				return nil, errors.New("db unavailable")
+			}},
+			wantErrSubstr:  "failed to load order",
 			wantRepoCalled: true,
 		},
 	}
@@ -132,6 +138,7 @@ func TestOrderService_LoadOrder(t *testing.T) {
 			}
 
 			svc := NewOrderService(repo, nil, &config.Config{AccrualAddress: "localhost:8080"})
+			t.Cleanup(svc.Close)
 			got, err := svc.LoadOrder(context.Background(), "user-1", tt.orderID)
 
 			if tt.wantWrongFormatErr {
@@ -199,6 +206,7 @@ func TestOrderService_GetOrders(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewOrderService(tt.repo, nil, &config.Config{AccrualAddress: "localhost:8080"})
+			t.Cleanup(svc.Close)
 			orders, err := svc.GetOrders(context.Background(), "user-1")
 
 			if tt.wantErrSubstr != "" {
@@ -261,6 +269,7 @@ func TestOrderService_GetWithdrawals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewOrderService(tt.repo, nil, &config.Config{AccrualAddress: "localhost:8080"})
+			t.Cleanup(svc.Close)
 			withdrawals, err := svc.GetWithdrawals(context.Background(), "user-1")
 
 			if tt.wantErrSubstr != "" {
@@ -321,6 +330,7 @@ func TestOrderService_UpdateOrder(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := NewOrderService(tt.repo, nil, &config.Config{AccrualAddress: "localhost:8080"})
+			t.Cleanup(svc.Close)
 			err := svc.UpdateOrder(context.Background(), &models.Order{ID: "79927398713"})
 
 			if tt.wantErrSubstr != "" {
@@ -338,5 +348,79 @@ func TestOrderService_UpdateOrder(t *testing.T) {
 				t.Fatal("expected UpdateOrder repository method to be called")
 			}
 		})
+	}
+}
+
+func TestOrderService_LoadOrder_EnqueuesSyncJob(t *testing.T) {
+	t.Parallel()
+
+	updated := make(chan *models.Order, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/orders/79927398713" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"order":"79927398713","status":"PROCESSING"}`))
+	}))
+	defer server.Close()
+
+	repo := &stubOrderRepo{
+		loadOrderFn: func(ctx context.Context, userID string, orderID string) (*models.Order, error) {
+			return &models.Order{ID: orderID, UserID: userID, Status: models.OrderStatusNew}, nil
+		},
+		updateOrderFn: func(ctx context.Context, order *models.Order) error {
+			updated <- order
+			return nil
+		},
+	}
+
+	svc := NewOrderService(repo, nil, &config.Config{AccrualAddress: server.URL})
+	defer svc.Close()
+
+	order, err := svc.LoadOrder(context.Background(), "user-1", "79927398713")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if order == nil {
+		t.Fatal("expected order, got nil")
+	}
+
+	select {
+	case got := <-updated:
+		if got.Status != models.OrderStatusProcessing {
+			t.Fatalf("expected updated status %q, got %q", models.OrderStatusProcessing, got.Status)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected worker pool to update order")
+	}
+}
+
+func TestOrderService_LoadOrder_SkipsTerminalStatuses(t *testing.T) {
+	t.Parallel()
+
+	hit := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit <- struct{}{}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	repo := &stubOrderRepo{
+		loadOrderFn: func(ctx context.Context, userID string, orderID string) (*models.Order, error) {
+			return &models.Order{ID: orderID, UserID: userID, Status: models.OrderStatusProcessed}, nil
+		},
+	}
+
+	svc := NewOrderService(repo, nil, &config.Config{AccrualAddress: server.URL})
+	defer svc.Close()
+
+	if _, err := svc.LoadOrder(context.Background(), "user-1", "79927398713"); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	select {
+	case <-hit:
+		t.Fatal("expected terminal order status to skip sync job")
+	case <-time.After(150 * time.Millisecond):
 	}
 }
