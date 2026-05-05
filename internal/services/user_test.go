@@ -381,8 +381,7 @@ func TestUserService_DoWithdraw(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
-				var notEnough *models.ErrNotEnoughFunds
-				if !errors.As(err, &notEnough) {
+				if !errors.Is(err, models.ErrNotEnoughFunds) {
 					t.Fatalf("expected ErrNotEnoughFunds, got %T", err)
 				}
 			} else if tt.wantErrSubstr != "" {

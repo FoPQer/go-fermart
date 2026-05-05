@@ -4,11 +4,9 @@ import (
 	"FoPQer/go-fermart/internal/config"
 	"FoPQer/go-fermart/internal/models"
 	"FoPQer/go-fermart/internal/repository/order"
+	"FoPQer/go-fermart/internal/txutil"
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"time"
 )
 
 type ErrWrongOrderIDFormat struct {
@@ -20,19 +18,30 @@ func (e *ErrWrongOrderIDFormat) Error() string {
 }
 
 type OrderDetails struct {
-	OrderID string  			`json:"order"`
-	Status  models.OrderStatus  `json:"status"`
-	Accrual float32 			`json:"accrual,omitempty"`
+	OrderID string             `json:"order"`
+	Status  models.OrderStatus `json:"status"`
+	Accrual float32            `json:"accrual,omitempty"`
 }
 
 type OrderService struct {
-	repo order.Repository
-	userService *UserService
-	config *config.Config
+	repo       order.Repository
+	dispatcher OrderSyncDispatcher
+	collector  *OrderSyncCollector
 }
 
-func NewOrderService(repo order.Repository, userService *UserService, config *config.Config) *OrderService {
-	return &OrderService{repo: repo, userService: userService, config: config}
+func NewOrderService(repo order.Repository, userService *UserService, config *config.Config, transactor txutil.Transactor) *OrderService {
+	dispatcher := NewOrderSyncDispatcher(repo, userService, config, transactor)
+	collector := NewOrderSyncCollector(repo, dispatcher, defaultOrderScanInterval)
+	return &OrderService{
+		repo:       repo,
+		dispatcher: dispatcher,
+		collector:  collector,
+	}
+}
+
+func (s *OrderService) Close() {
+	s.collector.Close()
+	s.dispatcher.Close()
 }
 
 func (s *OrderService) LoadOrder(ctx context.Context, userID string, orderID string) (*models.Order, error) {
@@ -45,50 +54,6 @@ func (s *OrderService) LoadOrder(ctx context.Context, userID string, orderID str
 	if err != nil {
 		return order, fmt.Errorf("failed to load order: %w", err)
 	}
-
-	go func(order *models.Order) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-		resp, err := http.Get(fmt.Sprintf("%s/api/orders/%s", s.config.GetAccrualAddress(), order.ID))
-		if err != nil {
-			fmt.Printf("failed to fetch order details: %v\n", err)
-			return
-		}
-		defer resp.Body.Close()
-
-		switch resp.StatusCode {
-		case http.StatusOK:
-			var orderDetails OrderDetails
-			if err := json.NewDecoder(resp.Body).Decode(&orderDetails); err != nil {
-				fmt.Printf("failed to decode order details: %v\n", err)
-				return
-			}
-
-			order.Status = orderDetails.Status
-			now := time.Now()
-			order.ProcessedAt = &now
-			if orderDetails.Accrual > 0 {
-				if err := s.userService.DoDeposit(ctx, order.UserID, orderDetails.Accrual); err != nil {
-					fmt.Printf("failed to add funds to user: %v\n", err)
-					return
-				}
-				order.Accrual = orderDetails.Accrual
-			}
-			if err := s.repo.UpdateOrder(ctx, order); err != nil {
-				fmt.Printf("failed to update order: %v\n", err)
-				return
-			}
-		case http.StatusNoContent:
-			fmt.Printf("Order is not registered: %s\n", order.ID)
-			return 
-		case http.StatusTooManyRequests:
-			fmt.Printf("Too many requests for order: %s\n", order.ID)
-			return
-		default:
-			fmt.Printf("Unexpected status code %d for order: %s\n", resp.StatusCode, order.ID)
-			return
-		}
-	}(order)
 
 	return order, nil
 }

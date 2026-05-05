@@ -59,13 +59,17 @@ func (s *stubOrderHandlerOrderRepo) GetOrdersWithdrawnByUserID(ctx context.Conte
 	return nil, nil
 }
 
+func (s *stubOrderHandlerOrderRepo) GetUnprocessedOrders(ctx context.Context) ([]*models.Order, error) {
+	return nil, nil
+}
+
 func (s *stubOrderHandlerOrderRepo) UpdateOrder(ctx context.Context, order *models.Order) error {
 	return nil
 }
 
 func newOrderHandlerForTest(orderRepo *stubOrderHandlerOrderRepo) *OrderHandler {
 	userService := services.NewUserService(&stubOrderHandlerUserRepo{})
-	orderService := services.NewOrderService(orderRepo, userService, &config.Config{AccrualAddress: "localhost:8080"})
+	orderService := services.NewOrderService(orderRepo, userService, &config.Config{AccrualAddress: "localhost:8080"}, nil)
 	return NewOrderHandler(orderService)
 }
 
@@ -161,7 +165,7 @@ func TestOrderHandler_LoadOrder(t *testing.T) {
 				},
 			},
 			wantStatus: http.StatusInternalServerError,
-			wantBody:   "Failed to load order",
+			wantBody:   http.StatusText(http.StatusInternalServerError),
 		},
 		{
 			name:   "accepts new order",
@@ -230,7 +234,7 @@ func TestOrderHandler_GetOrders(t *testing.T) {
 				},
 			},
 			wantStatus: http.StatusInternalServerError,
-			wantBody:   "Failed to get orders",
+			wantBody:   http.StatusText(http.StatusInternalServerError),
 		},
 		{
 			name:   "returns mapped orders",

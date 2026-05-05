@@ -8,31 +8,32 @@ import (
 	"FoPQer/go-fermart/internal/repository"
 	"FoPQer/go-fermart/internal/routes"
 	"FoPQer/go-fermart/internal/services"
+	"context"
 	"errors"
+	"log"
 	"log/slog"
 )
 
 func main() {
-	config := config.NewConfig()
-	config.Load()
-	pgxConf, err := db.InitPgsql(config)
+	config := config.Load()
+	pgxConn, err := db.InitPgsql(context.Background(), config)
 	if errors.Is(err, db.ErrConnNotFound) {
-		slog.Info("Database connection string not found, using file or memory repository")
+		log.Fatalf("Database connection string not found, using file or memory repository")
 	} else if err != nil {
-		slog.Error("Error initializing database: ", "error", err)
-		panic(err)
+		log.Fatalf("Error initializing database: %v", err)
 	}
-	if pgxConf.GetDBConn() != nil {
-		defer pgxConf.GetDBConn().Close()
-	} 
+	if pgxConn != nil {
+		defer pgxConn.Close()
+	}
 
-	repoFactory := repository.NewFactory(pgxConf.GetDBConn())
+	repoFactory := repository.NewFactory(pgxConn)
 
 	userRepository := repoFactory.GetUserRepository()
 	orderRepository := repoFactory.GetOrderRepository()
 
 	userService := services.NewUserService(userRepository)
-	orderService := services.NewOrderService(orderRepository, userService, config)
+	orderService := services.NewOrderService(orderRepository, userService, config, repoFactory.GetTransactor())
+	defer orderService.Close()
 	claimsService := auth.NewClaimsService()
 
 	orderHandler := handlers.NewOrderHandler(orderService)

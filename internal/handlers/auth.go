@@ -7,6 +7,7 @@ import (
 	"FoPQer/go-fermart/internal/services"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/labstack/echo/v5"
@@ -45,6 +46,7 @@ func (h *AuthHandler) Register(c *echo.Context) error {
 		return err
 	}
 	if err != nil {
+		slog.Error("failed to register user", "error", err)
 		c.Response().WriteHeader(http.StatusInternalServerError)
 		return err
 	}
@@ -52,6 +54,7 @@ func (h *AuthHandler) Register(c *echo.Context) error {
 	claims := h.claimsService.CreateClaims(userID)
 	token, err := h.claimsService.BuildJWTString(claims, h.cnf.GetSecretKey())
 	if err != nil {
+		slog.Error("failed to build JWT string", "error", err)
 		c.Response().WriteHeader(http.StatusInternalServerError)
 		return err
 	}
@@ -74,6 +77,7 @@ func (h *AuthHandler) Login(c *echo.Context) error {
 		return err
 	}
 	if err != nil {
+		slog.Error("failed to login user", "error", err)
 		c.Response().WriteHeader(http.StatusInternalServerError)
 		return err
 	}
@@ -81,6 +85,7 @@ func (h *AuthHandler) Login(c *echo.Context) error {
 	claims := h.claimsService.CreateClaims(userID)
 	token, err := h.claimsService.BuildJWTString(claims, h.cnf.GetSecretKey())
 	if err != nil {
+		slog.Error("failed to build JWT string", "error", err)
 		c.Response().WriteHeader(http.StatusInternalServerError)
 		return err
 	}

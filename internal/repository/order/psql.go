@@ -2,6 +2,7 @@ package order
 
 import (
 	"FoPQer/go-fermart/internal/models"
+	"FoPQer/go-fermart/internal/txutil"
 	"context"
 	"errors"
 	"fmt"
@@ -23,6 +24,13 @@ type PgsqlRepository struct {
 
 func NewPgsqlRepository(conn *pgxpool.Pool) *PgsqlRepository {
 	return &PgsqlRepository{conn: conn}
+}
+
+func (r *PgsqlRepository) querier(ctx context.Context) pgxQuerier {
+	if tx, ok := txutil.TxFromContext(ctx); ok {
+		return tx
+	}
+	return r.conn
 }
 
 func (r *PgsqlRepository) LoadOrder(ctx context.Context, userID string, orderID string) (*models.Order, error) {
@@ -100,8 +108,30 @@ func (r *PgsqlRepository) GetOrdersWithdrawnByUserID(ctx context.Context, userID
 	return orders, nil
 }
 
+func (r *PgsqlRepository) GetUnprocessedOrders(ctx context.Context) ([]*models.Order, error) {
+	rows, err := r.conn.Query(ctx, "SELECT number, user_id, status, uploaded_at, accrual, withdrawn, processed_at FROM orders WHERE status IN ($1, $2, $3) ORDER BY uploaded_at ASC", models.OrderStatusNew, models.OrderStatusRegistered, models.OrderStatusProcessing)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unprocessed orders: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []*models.Order
+	for rows.Next() {
+		var order models.Order
+		if err := rows.Scan(&order.ID, &order.UserID, &order.Status, &order.UploadedAt, &order.Accrual, &order.Withdrawn, &order.ProcessedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan order: %w", err)
+		}
+		orders = append(orders, &order)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return orders, nil
+}
+
 func (r *PgsqlRepository) UpdateOrder(ctx context.Context, order *models.Order) error {
-	_, err := r.conn.Exec(ctx, "UPDATE orders SET status = $1, accrual = $2, withdrawn = $3, processed_at = $4 WHERE number = $5",
+	_, err := r.querier(ctx).Exec(ctx, "UPDATE orders SET status = $1, accrual = $2, withdrawn = $3, processed_at = $4 WHERE number = $5",
 		order.Status, order.Accrual, order.Withdrawn, order.ProcessedAt, order.ID)
 	if err != nil {
 		return fmt.Errorf("failed to update order: %w", err)

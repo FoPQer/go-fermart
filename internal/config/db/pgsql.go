@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -15,38 +15,24 @@ import (
 
 var (
 	ErrConnNotFound = errors.New("connection to database not found")
-	ErrUnableToConnect = errors.New("unable to connect to database")
+	errUnableToConnect = errors.New("unable to connect to database")
 )
 
-type PgxConf struct {
-	DB *pgxpool.Pool
-}
-
-func (p *PgxConf) GetDBConn() *pgxpool.Pool {
-	return p.DB
-}
-
-func (p *PgxConf) SetDBConn(conn *pgxpool.Pool) {
-	p.DB = conn
-}
-
-func InitPgsql(cnf *config.Config) (*PgxConf, error) {
-	var pgxConf = &PgxConf{}
+func InitPgsql(ctx context.Context, cnf *config.Config) (*pgxpool.Pool, error) {
 	if cnf.GetDatabaseURI() == "" {
-		return pgxConf, ErrConnNotFound
+		return nil, ErrConnNotFound
 	}
-	conn, err := pgxpool.New(context.Background(), cnf.GetDatabaseURI())
+	conn, err := pgxpool.New(ctx, cnf.GetDatabaseURI())
 	if err != nil {
-		return pgxConf, ErrUnableToConnect
+		return nil, errUnableToConnect
 	}
 
-	log.Println("Connected to database successfully")
+	slog.Info("Connected to database successfully")
 	if err := runMigrations(cnf); err != nil {
-		return pgxConf, err
+		return nil, err
 	}
 
-	pgxConf.SetDBConn(conn)
-	return pgxConf, nil
+	return conn, nil
 }
 
 func runMigrations(cnf *config.Config) error {

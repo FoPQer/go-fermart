@@ -6,7 +6,7 @@ import (
 	"FoPQer/go-fermart/internal/services"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -47,21 +47,25 @@ func (h *OrderHandler) LoadOrder(c *echo.Context) error {
 		return c.String(http.StatusUnauthorized, "Failed to get user from token")
 	}
 	loadedOrder, err := h.orderService.LoadOrder(c.Request().Context(), userID, req.OrderID)
+	if err == nil {
+		return c.JSON(http.StatusAccepted, loadedOrder)
+	}
+
 	errAlreadyExists := &order.ErrOrderAlreadyExists{OrderID: req.OrderID}
 	errAlreadyExistsForAnotherUser := &order.ErrOrderAlreadyExistsForAnotherUser{OrderID: req.OrderID, UserID: userID}
 	errWrongOrderIDFormat := &services.ErrWrongOrderIDFormat{OrderID: req.OrderID}
-	if errors.As(err, &errAlreadyExists) {
+	switch {
+	case errors.As(err, &errAlreadyExists):
 		return c.JSON(http.StatusOK, loadedOrder)
-	} else if errors.As(err, &errAlreadyExistsForAnotherUser) {
+	case errors.As(err, &errAlreadyExistsForAnotherUser):
 		return c.String(http.StatusConflict, "Order already exists for another user")
-	} else if errors.As(err, &errWrongOrderIDFormat) {
-		log.Printf("wrong order ID format: %s", req.OrderID)
+	case errors.As(err, &errWrongOrderIDFormat):
+		slog.Error("wrong order ID format", "orderID", req.OrderID)
 		return c.String(http.StatusUnprocessableEntity, "Wrong order ID format")
-	} else if err != nil {
-		log.Printf("failed to load orderID %s: %v", req.OrderID, err)
-		return c.String(http.StatusInternalServerError, "Failed to load order")
+	default:
+		slog.Error("failed to load order", "orderID", req.OrderID, "error", err)
+		return c.String(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
-	return c.JSON(http.StatusAccepted, loadedOrder)
 }
 
 func (h *OrderHandler) GetOrders(c *echo.Context) error {
@@ -71,8 +75,8 @@ func (h *OrderHandler) GetOrders(c *echo.Context) error {
 	}
 	orders, err := h.orderService.GetOrders(c.Request().Context(), userID)
 	if err != nil {
-		log.Printf("failed to get orders for userID %s: %v", userID, err)
-		return c.String(http.StatusInternalServerError, "Failed to get orders")
+		slog.Error("failed to get orders", "userID", userID, "error", err)
+		return c.String(http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 	}
 	responses := make([]OrderResponse, 0)
 	for _, order := range orders {
